@@ -3,69 +3,55 @@
 Vercel部署专用的API入口文件
 """
 
-import sys
-import os
-import json
 from flask import Flask, render_template, jsonify
-
-# 添加根目录到路径
-root_path = os.path.dirname(os.path.dirname(__file__))
-src_path = os.path.join(root_path, 'src')
-if root_path not in sys.path:
-    sys.path.insert(0, root_path)
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+import requests
+import json
+import time
+import math
 
 # 创建Flask应用
-app = Flask(__name__,
-    template_folder=os.path.join(root_path, 'web', 'templates'),
-    static_folder=os.path.join(root_path, 'web', 'static')
-)
+app = Flask(__name__)
 
-# 直接使用requests，不依赖自定义模块
-import requests
-import time
-import pandas as pd
-import numpy as np
-
-print("✅ 使用直接API调用模式")
-
-def calculate_boll(prices, period=20, std_dev=2):
-    """计算布林带指标"""
+def calculate_simple_boll(prices, period=20):
+    """简化的布林带计算"""
     if len(prices) < period:
         return None, None, None
 
-    prices = np.array(prices)
-    ma = np.mean(prices[-period:])
-    std = np.std(prices[-period:])
+    # 计算均值
+    recent_prices = prices[-period:]
+    ma = sum(recent_prices) / len(recent_prices)
 
-    upper = ma + std_dev * std
-    lower = ma - std_dev * std
+    # 计算标准差
+    variance = sum((x - ma) ** 2 for x in recent_prices) / len(recent_prices)
+    std = math.sqrt(variance)
+
+    upper = ma + 2 * std
+    lower = ma - 2 * std
 
     return upper, ma, lower
 
-def calculate_kdj(highs, lows, closes, k_period=9, d_period=3, j_period=3):
-    """计算KDJ指标"""
-    if len(closes) < k_period:
+def calculate_simple_kdj(highs, lows, closes, period=9):
+    """简化的KDJ计算"""
+    if len(closes) < period:
         return None, None, None
 
-    highs = np.array(highs)
-    lows = np.array(lows)
-    closes = np.array(closes)
+    # 获取最近期间的数据
+    recent_highs = highs[-period:]
+    recent_lows = lows[-period:]
+    current_close = closes[-1]
 
-    # 计算最近k_period期间的最高价和最低价
-    highest = np.max(highs[-k_period:])
-    lowest = np.min(lows[-k_period:])
+    highest = max(recent_highs)
+    lowest = min(recent_lows)
 
     if highest == lowest:
         rsv = 50
     else:
-        rsv = (closes[-1] - lowest) / (highest - lowest) * 100
+        rsv = (current_close - lowest) / (highest - lowest) * 100
 
-    # 简化的KDJ计算
-    k = rsv * 0.33 + 50 * 0.67  # 简化的K值
-    d = k * 0.33 + 50 * 0.67    # 简化的D值
-    j = 3 * k - 2 * d           # J值
+    # 简化的KDJ
+    k = rsv * 0.33 + 50 * 0.67
+    d = k * 0.33 + 50 * 0.67
+    j = 3 * k - 2 * d
 
     return k, d, j
 
@@ -98,7 +84,93 @@ def get_klines_data(symbol, interval, limit=50):
 @app.route('/')
 def index():
     """主页面"""
-    return render_template('monitor.html')
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>币安量化监控</title>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            .container { max-width: 800px; margin: 0 auto; }
+            .status { padding: 20px; background: #f0f0f0; margin: 20px 0; border-radius: 5px; }
+            .price { font-size: 24px; font-weight: bold; color: #333; }
+            .positive { color: green; }
+            .negative { color: red; }
+            .indicators { margin: 20px 0; }
+            .indicator-row { display: flex; justify-content: space-between; margin: 10px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 币安量化交易监控</h1>
+
+            <div class="status">
+                <h2>📊 BTC/USDT</h2>
+                <div id="btc-data">加载中...</div>
+            </div>
+
+            <div class="status">
+                <h2>💎 DOGE/USDT</h2>
+                <div id="doge-data">加载中...</div>
+            </div>
+        </div>
+
+        <script>
+            async function fetchData() {
+                try {
+                    const btcResponse = await fetch('/api/btc-data');
+                    const btcData = await btcResponse.json();
+
+                    if (btcData.error) {
+                        document.getElementById('btc-data').innerHTML = '❌ 错误: ' + btcData.error;
+                    } else {
+                        document.getElementById('btc-data').innerHTML = `
+                            <div class="price">$${btcData.price.toLocaleString()}</div>
+                            <div class="${btcData.change >= 0 ? 'positive' : 'negative'}">
+                                ${btcData.change >= 0 ? '+' : ''}${btcData.change.toFixed(2)}%
+                            </div>
+                            <div class="indicators">
+                                <h3>4小时指标</h3>
+                                ${btcData.indicators['4h'] ? `
+                                    <div>BOLL: ${btcData.indicators['4h'].boll.UP.toFixed(2)} / ${btcData.indicators['4h'].boll.MB.toFixed(2)} / ${btcData.indicators['4h'].boll.DN.toFixed(2)}</div>
+                                    <div>KDJ: ${btcData.indicators['4h'].kdj.K.toFixed(1)} / ${btcData.indicators['4h'].kdj.D.toFixed(1)} / ${btcData.indicators['4h'].kdj.J.toFixed(1)}</div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    document.getElementById('btc-data').innerHTML = '❌ 网络错误: ' + error.message;
+                }
+
+                try {
+                    const dogeResponse = await fetch('/api/doge-data');
+                    const dogeData = await dogeResponse.json();
+
+                    if (dogeData.error) {
+                        document.getElementById('doge-data').innerHTML = '❌ 错误: ' + dogeData.error;
+                    } else {
+                        document.getElementById('doge-data').innerHTML = `
+                            <div class="price">$${dogeData.price.toFixed(6)}</div>
+                            <div class="${dogeData.change >= 0 ? 'positive' : 'negative'}">
+                                ${dogeData.change >= 0 ? '+' : ''}${dogeData.change.toFixed(2)}%
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    document.getElementById('doge-data').innerHTML = '❌ 网络错误: ' + error.message;
+                }
+            }
+
+            // 初始加载
+            fetchData();
+
+            // 每3秒刷新
+            setInterval(fetchData, 3000);
+        </script>
+    </body>
+    </html>
+    """
 
 @app.route('/api/btc-data')
 def get_btc_data():
@@ -106,14 +178,14 @@ def get_btc_data():
     try:
         print("🔍 开始获取BTC数据")
 
-        # 直接调用币安API获取24小时数据
+        # 获取24小时数据
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT',
             timeout=10
         )
         response.raise_for_status()
         ticker_24h = response.json()
-        print(f"✅ 获取24h数据成功")
+        print("✅ 获取24h数据成功")
 
         current_price = float(ticker_24h['lastPrice'])
         price_change_percent = float(ticker_24h['priceChangePercent'])
@@ -121,14 +193,14 @@ def get_btc_data():
         low_24h = float(ticker_24h['lowPrice'])
         amplitude = ((high_24h - low_24h) / low_24h) * 100
 
-        # 计算真实的技术指标
+        # 计算技术指标
         indicators = {}
 
         # 4小时指标
         opens_4h, highs_4h, lows_4h, closes_4h = get_klines_data('BTCUSDT', '4h', 50)
         if closes_4h:
-            boll_up_4h, boll_mb_4h, boll_dn_4h = calculate_boll(closes_4h)
-            kdj_k_4h, kdj_d_4h, kdj_j_4h = calculate_kdj(highs_4h, lows_4h, closes_4h)
+            boll_up_4h, boll_mb_4h, boll_dn_4h = calculate_simple_boll(closes_4h)
+            kdj_k_4h, kdj_d_4h, kdj_j_4h = calculate_simple_kdj(highs_4h, lows_4h, closes_4h)
 
             indicators['4h'] = {
                 'boll': {
@@ -140,25 +212,6 @@ def get_btc_data():
                     'K': kdj_k_4h,
                     'D': kdj_d_4h,
                     'J': kdj_j_4h
-                }
-            }
-
-        # 1小时指标
-        opens_1h, highs_1h, lows_1h, closes_1h = get_klines_data('BTCUSDT', '1h', 50)
-        if closes_1h:
-            boll_up_1h, boll_mb_1h, boll_dn_1h = calculate_boll(closes_1h)
-            kdj_k_1h, kdj_d_1h, kdj_j_1h = calculate_kdj(highs_1h, lows_1h, closes_1h)
-
-            indicators['1h'] = {
-                'boll': {
-                    'UP': boll_up_1h,
-                    'MB': boll_mb_1h,
-                    'DN': boll_dn_1h
-                },
-                'kdj': {
-                    'K': kdj_k_1h,
-                    'D': kdj_d_1h,
-                    'J': kdj_j_1h
                 }
             }
 
@@ -184,80 +237,19 @@ def get_doge_data():
     try:
         print("🔍 开始获取DOGE数据")
 
-        # 直接调用币安API获取24小时数据
+        # 获取24小时数据
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=DOGEUSDT',
             timeout=10
         )
         response.raise_for_status()
         ticker_24h = response.json()
-        print(f"✅ 获取DOGE 24h数据成功")
 
         current_price = float(ticker_24h['lastPrice'])
         price_change_percent = float(ticker_24h['priceChangePercent'])
         high_24h = float(ticker_24h['highPrice'])
         low_24h = float(ticker_24h['lowPrice'])
         amplitude = ((high_24h - low_24h) / low_24h) * 100
-
-        # 计算真实的技术指标
-        indicators = {}
-
-        # 1小时指标
-        opens_1h, highs_1h, lows_1h, closes_1h = get_klines_data('DOGEUSDT', '1h', 50)
-        if closes_1h:
-            boll_up_1h, boll_mb_1h, boll_dn_1h = calculate_boll(closes_1h)
-            kdj_k_1h, kdj_d_1h, kdj_j_1h = calculate_kdj(highs_1h, lows_1h, closes_1h)
-
-            indicators['1h'] = {
-                'boll': {
-                    'UP': boll_up_1h,
-                    'MB': boll_mb_1h,
-                    'DN': boll_dn_1h
-                },
-                'kdj': {
-                    'K': kdj_k_1h,
-                    'D': kdj_d_1h,
-                    'J': kdj_j_1h
-                }
-            }
-
-        # 15分钟指标
-        opens_15m, highs_15m, lows_15m, closes_15m = get_klines_data('DOGEUSDT', '15m', 50)
-        if closes_15m:
-            boll_up_15m, boll_mb_15m, boll_dn_15m = calculate_boll(closes_15m)
-            kdj_k_15m, kdj_d_15m, kdj_j_15m = calculate_kdj(highs_15m, lows_15m, closes_15m)
-
-            indicators['15m'] = {
-                'boll': {
-                    'UP': boll_up_15m,
-                    'MB': boll_mb_15m,
-                    'DN': boll_dn_15m
-                },
-                'kdj': {
-                    'K': kdj_k_15m,
-                    'D': kdj_d_15m,
-                    'J': kdj_j_15m
-                }
-            }
-
-        # 1分钟指标
-        opens_1m, highs_1m, lows_1m, closes_1m = get_klines_data('DOGEUSDT', '1m', 50)
-        if closes_1m:
-            boll_up_1m, boll_mb_1m, boll_dn_1m = calculate_boll(closes_1m)
-            kdj_k_1m, kdj_d_1m, kdj_j_1m = calculate_kdj(highs_1m, lows_1m, closes_1m)
-
-            indicators['1m'] = {
-                'boll': {
-                    'UP': boll_up_1m,
-                    'MB': boll_mb_1m,
-                    'DN': boll_dn_1m
-                },
-                'kdj': {
-                    'K': kdj_k_1m,
-                    'D': kdj_d_1m,
-                    'J': kdj_j_1m
-                }
-            }
 
         return jsonify({
             'symbol': 'DOGEUSDT',
@@ -267,7 +259,7 @@ def get_doge_data():
             'growth_24h': price_change_percent,
             'high_24h': high_24h,
             'low_24h': low_24h,
-            'indicators': indicators,
+            'indicators': {},
             'timestamp': int(time.time() * 1000)
         })
 
