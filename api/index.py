@@ -3,70 +3,75 @@
 Vercel部署专用的API入口文件
 """
 
-from flask import Flask, render_template, jsonify
-import requests
+import sys
+import os
 import json
-import time
-import math
+from flask import Flask, render_template, jsonify
+
+# 添加根目录到路径
+root_path = os.path.dirname(os.path.dirname(__file__))
+src_path = os.path.join(root_path, 'src')
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 # 创建Flask应用
-app = Flask(__name__)
+app = Flask(__name__,
+    template_folder=os.path.join(root_path, 'web', 'templates'),
+    static_folder=os.path.join(root_path, 'web', 'static')
+)
 
-def calculate_simple_boll(prices, period=20):
-    """简化的布林带计算"""
+# 直接使用requests，不依赖自定义模块
+import requests
+import time
+import pandas as pd
+import numpy as np
+
+print("✅ 使用直接API调用模式")
+
+def calculate_boll(prices, period=20, std_dev=2):
+    """计算布林带指标"""
     if len(prices) < period:
         return None, None, None
 
-    # 计算均值
-    recent_prices = prices[-period:]
-    ma = sum(recent_prices) / len(recent_prices)
+    prices = np.array(prices)
+    ma = np.mean(prices[-period:])
+    std = np.std(prices[-period:])
 
-    # 计算标准差
-    variance = sum((x - ma) ** 2 for x in recent_prices) / len(recent_prices)
-    std = math.sqrt(variance)
-
-    upper = ma + 2 * std
-    lower = ma - 2 * std
+    upper = ma + std_dev * std
+    lower = ma - std_dev * std
 
     return upper, ma, lower
 
-def calculate_simple_kdj(highs, lows, closes, period=9):
-    """简化的KDJ计算"""
-    if len(closes) < period:
+def calculate_kdj(highs, lows, closes, k_period=9, d_period=3, j_period=3):
+    """计算KDJ指标"""
+    if len(closes) < k_period:
         return None, None, None
 
-    # 获取最近期间的数据
-    recent_highs = highs[-period:]
-    recent_lows = lows[-period:]
-    current_close = closes[-1]
+    highs = np.array(highs)
+    lows = np.array(lows)
+    closes = np.array(closes)
 
-    highest = max(recent_highs)
-    lowest = min(recent_lows)
+    # 计算最近k_period期间的最高价和最低价
+    highest = np.max(highs[-k_period:])
+    lowest = np.min(lows[-k_period:])
 
     if highest == lowest:
         rsv = 50
     else:
-        rsv = (current_close - lowest) / (highest - lowest) * 100
+        rsv = (closes[-1] - lowest) / (highest - lowest) * 100
 
-    # 简化的KDJ
-    k = rsv * 0.33 + 50 * 0.67
-    d = k * 0.33 + 50 * 0.67
-    j = 3 * k - 2 * d
+    # 简化的KDJ计算
+    k = rsv * 0.33 + 50 * 0.67  # 简化的K值
+    d = k * 0.33 + 50 * 0.67    # 简化的D值
+    j = 3 * k - 2 * d           # J值
 
     return k, d, j
 
 def get_klines_data(symbol, interval, limit=50):
     """获取K线数据"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        }
         response = requests.get(
             'https://api.binance.com/api/v3/klines',
             params={
@@ -74,7 +79,6 @@ def get_klines_data(symbol, interval, limit=50):
                 'interval': interval,
                 'limit': limit
             },
-            headers=headers,
             timeout=10
         )
         response.raise_for_status()
@@ -94,93 +98,7 @@ def get_klines_data(symbol, interval, limit=50):
 @app.route('/')
 def index():
     """主页面"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>币安量化监控</title>
-        <meta charset="UTF-8">
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            .status { padding: 20px; background: #f0f0f0; margin: 20px 0; border-radius: 5px; }
-            .price { font-size: 24px; font-weight: bold; color: #333; }
-            .positive { color: green; }
-            .negative { color: red; }
-            .indicators { margin: 20px 0; }
-            .indicator-row { display: flex; justify-content: space-between; margin: 10px 0; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 币安量化交易监控</h1>
-
-            <div class="status">
-                <h2>📊 BTC/USDT</h2>
-                <div id="btc-data">加载中...</div>
-            </div>
-
-            <div class="status">
-                <h2>💎 DOGE/USDT</h2>
-                <div id="doge-data">加载中...</div>
-            </div>
-        </div>
-
-        <script>
-            async function fetchData() {
-                try {
-                    const btcResponse = await fetch('/api/btc-data');
-                    const btcData = await btcResponse.json();
-
-                    if (btcData.error) {
-                        document.getElementById('btc-data').innerHTML = '❌ 错误: ' + btcData.error;
-                    } else {
-                        document.getElementById('btc-data').innerHTML = `
-                            <div class="price">$${btcData.price.toLocaleString()}</div>
-                            <div class="${btcData.change >= 0 ? 'positive' : 'negative'}">
-                                ${btcData.change >= 0 ? '+' : ''}${btcData.change.toFixed(2)}%
-                            </div>
-                            <div class="indicators">
-                                <h3>4小时指标</h3>
-                                ${btcData.indicators['4h'] ? `
-                                    <div>BOLL: ${btcData.indicators['4h'].boll.UP.toFixed(2)} / ${btcData.indicators['4h'].boll.MB.toFixed(2)} / ${btcData.indicators['4h'].boll.DN.toFixed(2)}</div>
-                                    <div>KDJ: ${btcData.indicators['4h'].kdj.K.toFixed(1)} / ${btcData.indicators['4h'].kdj.D.toFixed(1)} / ${btcData.indicators['4h'].kdj.J.toFixed(1)}</div>
-                                ` : ''}
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    document.getElementById('btc-data').innerHTML = '❌ 网络错误: ' + error.message;
-                }
-
-                try {
-                    const dogeResponse = await fetch('/api/doge-data');
-                    const dogeData = await dogeResponse.json();
-
-                    if (dogeData.error) {
-                        document.getElementById('doge-data').innerHTML = '❌ 错误: ' + dogeData.error;
-                    } else {
-                        document.getElementById('doge-data').innerHTML = `
-                            <div class="price">$${dogeData.price.toFixed(6)}</div>
-                            <div class="${dogeData.change >= 0 ? 'positive' : 'negative'}">
-                                ${dogeData.change >= 0 ? '+' : ''}${dogeData.change.toFixed(2)}%
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    document.getElementById('doge-data').innerHTML = '❌ 网络错误: ' + error.message;
-                }
-            }
-
-            // 初始加载
-            fetchData();
-
-            // 每3秒刷新
-            setInterval(fetchData, 3000);
-        </script>
-    </body>
-    </html>
-    """
+    return render_template('monitor.html')
 
 @app.route('/api/btc-data')
 def get_btc_data():
@@ -188,19 +106,9 @@ def get_btc_data():
     try:
         print("🔍 开始获取BTC数据")
 
-        # 获取24小时数据
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        }
+        # 直接调用币安API获取24小时数据
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT',
-            headers=headers,
             timeout=10
         )
         response.raise_for_status()
@@ -219,8 +127,8 @@ def get_btc_data():
         # 4小时指标
         opens_4h, highs_4h, lows_4h, closes_4h = get_klines_data('BTCUSDT', '4h', 50)
         if closes_4h:
-            boll_up_4h, boll_mb_4h, boll_dn_4h = calculate_simple_boll(closes_4h)
-            kdj_k_4h, kdj_d_4h, kdj_j_4h = calculate_simple_kdj(highs_4h, lows_4h, closes_4h)
+            boll_up_4h, boll_mb_4h, boll_dn_4h = calculate_boll(closes_4h)
+            kdj_k_4h, kdj_d_4h, kdj_j_4h = calculate_kdj(highs_4h, lows_4h, closes_4h)
 
             indicators['4h'] = {
                 'boll': {
@@ -257,19 +165,9 @@ def get_doge_data():
     try:
         print("🔍 开始获取DOGE数据")
 
-        # 获取24小时数据
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        }
+        # 直接调用币安API获取24小时数据
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=DOGEUSDT',
-            headers=headers,
             timeout=10
         )
         response.raise_for_status()
