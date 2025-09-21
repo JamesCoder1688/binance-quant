@@ -8,26 +8,32 @@ import os
 import json
 from flask import Flask, render_template, jsonify
 
-# 添加src路径
-src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+# 添加根目录到路径
+root_path = os.path.dirname(os.path.dirname(__file__))
+src_path = os.path.join(root_path, 'src')
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 # 创建Flask应用
 app = Flask(__name__,
-    template_folder='../web/templates',
-    static_folder='../web/static'
+    template_folder=os.path.join(root_path, 'web', 'templates'),
+    static_folder=os.path.join(root_path, 'web', 'static')
 )
 
 # 导入必要模块
+binance_api = None
 try:
     from src.data.binance_api import BinanceAPI
     from src.indicators.boll import BOLL
     from src.indicators.kdj import KDJ
     binance_api = BinanceAPI()
+    print("✅ 模块导入成功")
 except Exception as e:
-    print(f"导入模块失败: {e}")
-    binance_api = None
+    print(f"❌ 导入模块失败: {e}")
+    import traceback
+    traceback.print_exc()
 
 @app.route('/')
 def index():
@@ -38,13 +44,19 @@ def index():
 def get_btc_data():
     """获取BTC数据API"""
     try:
+        print("🔍 开始获取BTC数据")
+
         if not binance_api:
+            print("❌ binance_api未初始化")
             return jsonify({'error': '服务暂不可用'}), 500
 
         # 获取基础数据
+        print("📡 获取24小时数据")
         ticker_24h = binance_api.get_24hr_ticker('BTCUSDT')
+        print(f"📊 获取到数据: {ticker_24h is not None}")
 
         if not ticker_24h:
+            print("❌ 无法获取24h数据")
             return jsonify({'error': '无法获取数据'}), 500
 
         current_price = float(ticker_24h['lastPrice'])
