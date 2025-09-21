@@ -182,14 +182,16 @@ def get_btc_data():
 def get_doge_data():
     """获取DOGE数据API"""
     try:
-        if not binance_api:
-            return jsonify({'error': '服务暂不可用'}), 500
+        print("🔍 开始获取DOGE数据")
 
-        # 获取基础数据
-        ticker_24h = binance_api.get_24hr_ticker('DOGEUSDT')
-
-        if not ticker_24h:
-            return jsonify({'error': '无法获取数据'}), 500
+        # 直接调用币安API获取24小时数据
+        response = requests.get(
+            'https://api.binance.com/api/v3/ticker/24hr?symbol=DOGEUSDT',
+            timeout=10
+        )
+        response.raise_for_status()
+        ticker_24h = response.json()
+        print(f"✅ 获取DOGE 24h数据成功")
 
         current_price = float(ticker_24h['lastPrice'])
         price_change_percent = float(ticker_24h['priceChangePercent'])
@@ -197,25 +199,65 @@ def get_doge_data():
         low_24h = float(ticker_24h['lowPrice'])
         amplitude = ((high_24h - low_24h) / low_24h) * 100
 
-        # 获取技术指标
+        # 计算真实的技术指标
         indicators = {}
 
-        for timeframe in ['1h', '15m', '1m']:
-            try:
-                df = binance_api.get_klines('DOGEUSDT', timeframe, limit=50)
-                if not df.empty:
-                    boll = BOLL(period=20, std_dev=2)
-                    kdj = KDJ(k_period=9, d_period=3, j_period=3)
+        # 1小时指标
+        opens_1h, highs_1h, lows_1h, closes_1h = get_klines_data('DOGEUSDT', '1h', 50)
+        if closes_1h:
+            boll_up_1h, boll_mb_1h, boll_dn_1h = calculate_boll(closes_1h)
+            kdj_k_1h, kdj_d_1h, kdj_j_1h = calculate_kdj(highs_1h, lows_1h, closes_1h)
 
-                    boll_values = boll.get_latest_values(df)
-                    kdj_values = kdj.get_latest_values(df)
+            indicators['1h'] = {
+                'boll': {
+                    'UP': boll_up_1h,
+                    'MB': boll_mb_1h,
+                    'DN': boll_dn_1h
+                },
+                'kdj': {
+                    'K': kdj_k_1h,
+                    'D': kdj_d_1h,
+                    'J': kdj_j_1h
+                }
+            }
 
-                    indicators[timeframe] = {
-                        'boll': boll_values,
-                        'kdj': kdj_values
-                    }
-            except Exception as e:
-                print(f"DOGE {timeframe}指标计算失败: {e}")
+        # 15分钟指标
+        opens_15m, highs_15m, lows_15m, closes_15m = get_klines_data('DOGEUSDT', '15m', 50)
+        if closes_15m:
+            boll_up_15m, boll_mb_15m, boll_dn_15m = calculate_boll(closes_15m)
+            kdj_k_15m, kdj_d_15m, kdj_j_15m = calculate_kdj(highs_15m, lows_15m, closes_15m)
+
+            indicators['15m'] = {
+                'boll': {
+                    'UP': boll_up_15m,
+                    'MB': boll_mb_15m,
+                    'DN': boll_dn_15m
+                },
+                'kdj': {
+                    'K': kdj_k_15m,
+                    'D': kdj_d_15m,
+                    'J': kdj_j_15m
+                }
+            }
+
+        # 1分钟指标
+        opens_1m, highs_1m, lows_1m, closes_1m = get_klines_data('DOGEUSDT', '1m', 50)
+        if closes_1m:
+            boll_up_1m, boll_mb_1m, boll_dn_1m = calculate_boll(closes_1m)
+            kdj_k_1m, kdj_d_1m, kdj_j_1m = calculate_kdj(highs_1m, lows_1m, closes_1m)
+
+            indicators['1m'] = {
+                'boll': {
+                    'UP': boll_up_1m,
+                    'MB': boll_mb_1m,
+                    'DN': boll_dn_1m
+                },
+                'kdj': {
+                    'K': kdj_k_1m,
+                    'D': kdj_d_1m,
+                    'J': kdj_j_1m
+                }
+            }
 
         return jsonify({
             'symbol': 'DOGEUSDT',
@@ -230,10 +272,10 @@ def get_doge_data():
         })
 
     except Exception as e:
+        print(f"❌ DOGE数据获取失败: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Vercel入口点
-import time
 if __name__ == '__main__':
     app.run(debug=True)
 else:
