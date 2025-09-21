@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>币安量化交易监控系统</title>
+
+    <!-- SocketIO Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚀 币安量化交易监控</h1>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="label">连接状态:</span>
+                    <span id="connection-status" class="status disconnected">未连接</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">监控状态:</span>
+                    <span id="monitoring-status" class="status stopped">已停止</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">更新时间:</span>
+                    <span id="last-update">--:--:--</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="start-btn" class="btn btn-success">开始监控</button>
+                <button id="stop-btn" class="btn btn-danger">停止监控</button>
+                <button id="refresh-btn" class="btn btn-info">刷新数据</button>
+                <button id="settings-btn" class="btn btn-warning">策略设置</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- BTC Section -->
+            <section class="card btc-section">
+                <h2>📊 BTC/USDT 监控条件</h2>
+                <div class="btc-data">
+                    <div class="price-display">
+                        <div class="price">
+                            <span class="currency">$</span>
+                            <span id="btc-price">--,---</span>
+                        </div>
+                        <div class="change">
+                            <span id="btc-change">--.--%</span>
+                        </div>
+                    </div>
+                    <div class="conditions">
+                        <div class="condition-item">
+                            <span class="label">总体条件:</span>
+                            <span id="btc-condition-status" class="condition-status">检查中...</span>
+                        </div>
+                        <div class="condition-details">
+                            <div class="detail-item">
+                                <span class="label">24h振幅:</span>
+                                <span id="btc-volatility">--%</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="label">24h涨幅:</span>
+                                <span id="btc-growth">--%</span>
+                            </div>
+                        </div>
+
+                        <!-- BTC 技术指标详情 -->
+                        <div class="indicators-section">
+                            <h3>📈 技术指标详情</h3>
+
+                            <!-- 4小时指标 -->
+                            <div class="timeframe-indicators">
+                                <h4>4小时 (4h)</h4>
+                                <div class="indicator-grid">
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL上轨:</span>
+                                        <span id="btc-boll-4h-upper">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL中轨:</span>
+                                        <span id="btc-boll-4h-middle">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL下轨:</span>
+                                        <span id="btc-boll-4h-lower">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ K:</span>
+                                        <span id="btc-kdj-4h-k">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ D:</span>
+                                        <span id="btc-kdj-4h-d">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ J:</span>
+                                        <span id="btc-kdj-4h-j">--</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 1小时指标 -->
+                            <div class="timeframe-indicators">
+                                <h4>1小时 (1h)</h4>
+                                <div class="indicator-grid">
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL上轨:</span>
+                                        <span id="btc-boll-1h-upper">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL中轨:</span>
+                                        <span id="btc-boll-1h-middle">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">BOLL下轨:</span>
+                                        <span id="btc-boll-1h-lower">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ K:</span>
+                                        <span id="btc-kdj-1h-k">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ D:</span>
+                                        <span id="btc-kdj-1h-d">--</span>
+                                    </div>
+                                    <div class="indicator-item">
+                                        <span class="label">KDJ J:</span>
+                                        <span id="btc-kdj-1h-j">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DOGE Section -->
+            <section class="card doge-section">
+                <h2>💎 DOGE/USDT 实时数据</h2>
+                <div class="doge-data">
+                    <div class="price-display">
+                        <div class="price">
+                            <span class="currency">$</span>
+                            <span id="doge-price">0.------</span>
+                        </div>
+                        <div class="change">
+                            <span id="doge-change">--.--%</span>
+                        </div>
+                    </div>
+
+                    <!-- DOGE市场统计 -->
+                    <div class="condition-details">
+                        <div class="detail-item">
+                            <span class="label">24h振幅:</span>
+                            <span id="doge-volatility">--%</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">24h涨幅:</span>
+                            <span id="doge-growth">--%</span>
+                        </div>
+                    </div>
+
+                    <!-- DOGE 技术指标详情 -->
+                    <div class="indicators-section">
+                        <h3>📊 技术指标详情</h3>
+
+                        <!-- 1小时指标 -->
+                        <div class="timeframe-indicators">
+                            <h4>1小时 (1h)</h4>
+                            <div class="indicator-grid">
+                                <div class="indicator-item">
+                                    <span class="label">BOLL上轨:</span>
+                                    <span id="doge-boll-1h-upper">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL中轨:</span>
+                                    <span id="doge-boll-1h-middle">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL下轨:</span>
+                                    <span id="doge-boll-1h-lower">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ K:</span>
+                                    <span id="doge-kdj-1h-k">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ D:</span>
+                                    <span id="doge-kdj-1h-d">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ J:</span>
+                                    <span id="doge-kdj-1h-j">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 15分钟指标 -->
+                        <div class="timeframe-indicators">
+                            <h4>15分钟 (15m)</h4>
+                            <div class="indicator-grid">
+                                <div class="indicator-item">
+                                    <span class="label">BOLL上轨:</span>
+                                    <span id="doge-boll-15m-upper">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL中轨:</span>
+                                    <span id="doge-boll-15m-middle">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL下轨:</span>
+                                    <span id="doge-boll-15m-lower">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ K:</span>
+                                    <span id="doge-kdj-15m-k">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ D:</span>
+                                    <span id="doge-kdj-15m-d">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ J:</span>
+                                    <span id="doge-kdj-15m-j">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 1分钟指标 -->
+                        <div class="timeframe-indicators">
+                            <h4>1分钟 (1m)</h4>
+                            <div class="indicator-grid">
+                                <div class="indicator-item">
+                                    <span class="label">BOLL上轨:</span>
+                                    <span id="doge-boll-1m-upper">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL中轨:</span>
+                                    <span id="doge-boll-1m-middle">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">BOLL下轨:</span>
+                                    <span id="doge-boll-1m-lower">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ K:</span>
+                                    <span id="doge-kdj-1m-k">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ D:</span>
+                                    <span id="doge-kdj-1m-d">--</span>
+                                </div>
+                                <div class="indicator-item">
+                                    <span class="label">KDJ J:</span>
+                                    <span id="doge-kdj-1m-j">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Signals Section -->
+            <section class="card signals-section">
+                <h2>🚨 交易信号</h2>
+                <div class="signals-data">
+                    <div class="signal-count">
+                        <span class="label">当前信号数量:</span>
+                        <span id="signal-count" class="count">0</span>
+                    </div>
+                    <div id="signal-list" class="signal-list">
+                        <p class="no-signals">暂无信号</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Log Section -->
+            <section class="card log-section">
+                <h2>📝 实时日志</h2>
+                <div class="log-container">
+                    <div id="log-content" class="log-content">
+                        <p class="log-entry">等待连接...</p>
+                    </div>
+                    <button id="clear-log-btn" class="btn btn-secondary">清空日志</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 策略参数设置</h2>
+                <span class="close" id="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="settings-form">
+                    <!-- BTC条件设置 -->
+                    <div class="setting-group">
+                        <h3>📊 BTC监控条件</h3>
+                        <div class="setting-item">
+                            <label for="volatility-threshold">24小时振幅阈值 (%):</label>
+                            <input type="number" id="volatility-threshold" step="0.01" min="0" max="10">
+                            <span class="help-text">当前设置: 振幅 < 此值时满足条件</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="growth-threshold">24小时涨幅阈值 (%):</label>
+                            <input type="number" id="growth-threshold" step="0.01" min="0" max="10">
+                            <span class="help-text">当前设置: 涨幅 > 此值时满足条件</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="kdj-threshold">KDJ阈值:</label>
+                            <input type="number" id="kdj-threshold" step="1" min="10" max="90">
+                            <span class="help-text">4小时和1小时KDJ都要 < 此值</span>
+                        </div>
+                    </div>
+
+                    <!-- DOGE信号设置 -->
+                    <div class="setting-group">
+                        <h3>💎 DOGE交易信号</h3>
+                        <div class="setting-item">
+                            <label for="oversold-1">买入信号1 KDJ阈值:</label>
+                            <input type="number" id="oversold-1" step="1" min="5" max="30">
+                            <span class="help-text">1小时和15分钟 KDJ < 此值</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="oversold-2">买入信号2 KDJ阈值:</label>
+                            <input type="number" id="oversold-2" step="1" min="5" max="30">
+                            <span class="help-text">1小时 KDJ < 此值</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="oversold-3">买入信号3 KDJ阈值:</label>
+                            <input type="number" id="oversold-3" step="1" min="5" max="30">
+                            <span class="help-text">15分钟 KDJ < 此值</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="oversold-4">1分钟 KDJ阈值:</label>
+                            <input type="number" id="oversold-4" step="1" min="5" max="30">
+                            <span class="help-text">1分钟 KDJ < 此值</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="overbought">卖出信号 KDJ阈值:</label>
+                            <input type="number" id="overbought" step="1" min="70" max="95">
+                            <span class="help-text">KDJ > 此值时触发卖出</span>
+                        </div>
+                    </div>
+
+                    <!-- 监控设置 -->
+                    <div class="setting-group">
+                        <h3>🔄 监控设置</h3>
+                        <div class="setting-item">
+                            <label for="update-interval">监控间隔 (秒):</label>
+                            <input type="number" id="update-interval" step="1" min="1" max="60">
+                            <span class="help-text">数据更新频率</span>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" id="load-default-btn" class="btn btn-secondary">恢复默认</button>
+                        <button type="button" id="save-settings-btn" class="btn btn-success">保存设置</button>
+                        <button type="button" id="cancel-settings-btn" class="btn btn-danger">取消</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "api": {
+    "base_url": "https://api.binance.com",
+    "ws_url": "wss://stream.binance.com:9443/stream",
+    "timeout": 10
+  },
+  "symbols": {
+    "btc": "BTCUSDT",
+    "doge": "DOGEUSDT"
+  },
+  "timeframes": {
+    "btc": [
+      "4h",
+      "1h"
+    ],
+    "doge": [
+      "1h",
+      "15m",
+      "1m"
+    ]
+  },
+  "indicators": {
+    "boll": {
+      "period": 20,
+      "std_dev": 2
+    },
+    "kdj": {
+      "k_period": 9,
+      "k_smooth": 3,
+      "d_smooth": 3
+    }
+  },
+  "strategy": {
+    "btc_conditions": {
+      "volatility_threshold": 0.03,
+      "growth_threshold": 0.01,
+      "kdj_threshold": 50.0
+    },
+    "doge_thresholds": {
+      "oversold": [
+        10,
+        15,
+        20,
+        20
+      ],
+      "overbought": 90.0
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/trading_signals.log",
+    "max_size": "10MB",
+    "backup_count": 5
+  },
+  "monitoring": {
+    "update_interval": 0,
+    "console_output": true,
+    "enable_sound": false
+  }
+}
