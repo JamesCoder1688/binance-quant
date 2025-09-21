@@ -58,6 +58,15 @@ def calculate_simple_kdj(highs, lows, closes, period=9):
 def get_klines_data(symbol, interval, limit=50):
     """获取K线数据"""
     try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        }
         response = requests.get(
             'https://api.binance.com/api/v3/klines',
             params={
@@ -65,6 +74,7 @@ def get_klines_data(symbol, interval, limit=50):
                 'interval': interval,
                 'limit': limit
             },
+            headers=headers,
             timeout=10
         )
         response.raise_for_status()
@@ -179,8 +189,18 @@ def get_btc_data():
         print("🔍 开始获取BTC数据")
 
         # 获取24小时数据
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        }
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT',
+            headers=headers,
             timeout=10
         )
         response.raise_for_status()
@@ -238,8 +258,18 @@ def get_doge_data():
         print("🔍 开始获取DOGE数据")
 
         # 获取24小时数据
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        }
         response = requests.get(
             'https://api.binance.com/api/v3/ticker/24hr?symbol=DOGEUSDT',
+            headers=headers,
             timeout=10
         )
         response.raise_for_status()
